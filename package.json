@@ -1,0 +1,20 @@
+{
+  "name": "derstar-contracts",
+  "version": "1.0.0",
+  "description": "Derstar options DEX smart contracts (Arbitrum)",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vv",
+    "fmt": "forge fmt",
+    "deploy:sepolia": "forge script script/DeployTestnet.s.sol --rpc-url arbitrum_sepolia --broadcast --slow"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@foundry-rs/anvil-linux-amd64": "^1.7.1",
+    "@foundry-rs/forge-linux-amd64": "^1.7.1",
+    "@openzeppelin/contracts": "^5.4.0",
+    "forge-std": "^1.1.2",
+    "solady": "^0.1.26"
+  },
+  "private": true
+}
