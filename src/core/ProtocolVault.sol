@@ -149,7 +149,9 @@ contract ProtocolVault is IQuoteVault, ERC20, AccessControl, ReentrancyGuard {
         if (vaultSide == Side.Sell) return _ask(seriesId, cfg, fairUsdc, oi, lots);
         uint256 held = clearing.token().balanceOf(address(this), seriesId);
         uint64 room = oi + (held < maxOIPerSeries ? maxOIPerSeries - uint64(held) : 0);
-        return _bid(cfg, fairUsdc, room, lots);
+        // Per contract, USDC: the settlement reserve (Clearing.SETTLEMENT_RESERVE_PPM = 600 of the strike)
+        // plus a bound on the maker fee, 0.03% of spot (twice today's maker rate; the premium cap only lowers it).
+        return _bid(uint256(s.strike) * 600 + spot * 3 / 1e6, cfg, fairUsdc, room, lots);
     }
 
     function _ask(uint256 seriesId, UnderlyingConfig memory cfg, uint256 fairUsdc, uint64 oi, uint64 lots)
@@ -198,7 +200,7 @@ contract ProtocolVault is IQuoteVault, ERC20, AccessControl, ReentrancyGuard {
         }
     }
 
-    function _bid(UnderlyingConfig memory cfg, uint256 fairUsdc, uint64 room, uint64 lots)
+    function _bid(uint256 overhead, UnderlyingConfig memory cfg, uint256 fairUsdc, uint64 room, uint64 lots)
         internal
         view
         returns (uint32, uint64)
@@ -206,9 +208,9 @@ contract ProtocolVault is IQuoteVault, ERC20, AccessControl, ReentrancyGuard {
         uint256 ticks = fairUsdc * (BPS - spreadBps) / (BPS * cfg.tickSize);
         if (ticks == 0 || ticks > MAX_TICK) return (0, 0);
         uint64 avail = _min(_min(lots, maxLotsPerTrade), room);
-        // Pay premium plus the maker fee (at most 6.25% of premium) from free USDC.
-        uint256 costPerLot = ticks * (cfg.tickSize / cfg.lotsPerContract) * 10_625 / BPS + 1;
-        uint256 byUsdc = clearing.freeBalance(address(this), usdc) / costPerLot;
+        // Pay premium, maker fee and settlement reserve from free USDC.
+        uint256 byUsdc =
+            clearing.freeBalance(address(this), usdc) / ((ticks * cfg.tickSize + overhead) / cfg.lotsPerContract + 2);
         // forge-lint: disable-next-line(unsafe-typecast) -- below avail, a uint64
         if (byUsdc < avail) avail = uint64(byUsdc);
         if (avail == 0) return (0, 0);
