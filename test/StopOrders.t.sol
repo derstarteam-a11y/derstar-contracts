@@ -155,6 +155,7 @@ contract StopOrdersTest is TradingBase {
         _bid(mm, call110, 400, 10);
         _sell(bob, call110, 10, 400);
 
+        assertTrue(stops.isTriggered(id), "void stop is due for removal");
         assertEq(stops.trigger(id), 0);
         assertEq(stops.getStop(id).owner, address(0));
         assertEq(stops.stopCount(bob), 0);

@@ -149,10 +149,12 @@ contract StopOrders is ReentrancyGuard {
         return ticks > type(uint32).max ? type(uint32).max : uint32(ticks);
     }
 
-    /// @notice Whether trigger() would fire now (ignores the book's depth).
+    /// @notice Whether trigger() has work to do now (ignores the book's depth): the mark crossed the
+    /// trigger, or the stop is void (position gone, series past its cutoff) and would be removed.
     function isTriggered(uint64 stopId) external view returns (bool) {
         Stop memory s = _stops[stopId];
         if (s.owner == address(0)) return false;
+        if (_held(s.owner, s.seriesId, s.side) == 0 || !registry.isTradable(s.seriesId)) return true;
         try this.markTicks(s.seriesId) returns (uint32 mark) {
             return s.side == Side.Sell ? mark <= s.triggerTicks : mark >= s.triggerTicks;
         } catch {
