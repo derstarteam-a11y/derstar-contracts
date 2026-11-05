@@ -8,7 +8,7 @@ import {IClearing} from "../interfaces/IClearing.sol";
 import {ISeriesRegistry} from "../interfaces/ISeriesRegistry.sol";
 import {IQuoteVault} from "../interfaces/IQuoteVault.sol";
 import {IOracleAdapter} from "../interfaces/IOracleAdapter.sol";
-import {Side, Fill, SeriesState, Series, OptionType} from "../types/DerstarTypes.sol";
+import {Side, Fill, SeriesState, Series, OptionType, UnderlyingConfig} from "../types/DerstarTypes.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
 import {SeriesId} from "../libraries/SeriesId.sol";
 import {BlackScholes} from "../libraries/BlackScholes.sol";
@@ -293,6 +293,15 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         return _take(seriesId, Side.Sell, lots, minPriceTicks, minLots, deadline);
     }
 
+    function takeLegs(Leg[] calldata legs, uint64 deadline) external nonReentrant {
+        if (legs.length == 0 || legs.length > 4) revert InvalidSize();
+        for (uint256 i; i < legs.length; ++i) {
+            Leg calldata l = legs[i];
+            if (l.pledgeFrom != 0) clearing.pledgeFor(msg.sender, l.pledgeFrom, l.seriesId, l.lots);
+            _take(l.seriesId, l.side, l.lots, l.limit, l.lots, deadline);
+        }
+    }
+
     function _take(uint256 seriesId, Side side, uint64 lots, uint32 limit, uint64 minLots, uint64 deadline)
         internal
         returns (uint64 filled, uint256 premium, uint256 fee)
@@ -537,7 +546,63 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
             uint32 p = fills[i].priceTicks;
             if (worstTicks == 0 || _better(side == Side.Buy, worstTicks, p)) worstTicks = p;
         }
-        (premium, fee, collateralNeeded, collateralFreed) = clearing.previewFills(taker, side, seriesId, fills);
+        (premium, fee, collateralNeeded, collateralFreed) = _previewCost(taker, side, seriesId, fills);
+    }
+
+    /// @dev Running state of _previewCost (a struct keeps the stack shallow).
+    struct Cost {
+        uint256 lpc;
+        uint256 tickUnit;
+        uint256 perLot;
+        uint256 feeNum;
+        uint256 cap;
+        uint256 tokens;
+        uint256 plainShort;
+        uint256 credit;
+    }
+
+    /// @dev What the taker would pay or receive for these fills (mirrors Clearing.settleFills).
+    /// collateralIn: collateral the taker must bring for written lots; collateralOut: freed by covering.
+    function _previewCost(address taker, Side side, uint256 seriesId, Fill[] memory fills)
+        internal
+        view
+        returns (uint256 premium, uint256 fee, uint256 collateralIn, uint256 collateralOut)
+    {
+        Cost memory k;
+        {
+            uint8 u = SeriesId.underlying(seriesId);
+            UnderlyingConfig memory cfg = registry.config(u);
+            k.lpc = cfg.lotsPerContract;
+            k.tickUnit = cfg.tickSize / cfg.lotsPerContract;
+            (, k.perLot) = registry.collateralPerLot(seriesId);
+            (uint256 spot,) = clearing.oracle().spot(u);
+            k.feeNum = spot * clearing.notionalFeePpm();
+            k.cap = clearing.premiumCapPpm();
+            k.tokens = clearing.token().balanceOf(taker, seriesId);
+            k.plainShort = clearing.shortOf(taker, seriesId) - clearing.coveredShort(taker, seriesId);
+            k.credit = clearing.coverCredit(taker, seriesId);
+        }
+        for (uint256 i; i < fills.length; ++i) {
+            uint256 lots = fills[i].lots;
+            uint256 p = uint256(fills[i].priceTicks) * k.tickUnit * lots;
+            premium += p;
+            fee += _min256(k.feeNum * lots / (k.lpc * 1e8), p * k.cap / 1e6);
+            if (side == Side.Sell) {
+                uint256 use = _min256(k.tokens, lots);
+                k.tokens -= use;
+                uint256 cr = _min256(k.credit, lots - use);
+                k.credit -= cr;
+                collateralIn += (lots - use - cr) * k.perLot;
+            } else {
+                uint256 n = _min256(k.plainShort, lots);
+                k.plainShort -= n;
+                collateralOut += n * k.perLot;
+            }
+        }
+    }
+
+    function _min256(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
     }
 
     function best(uint256 seriesId)
