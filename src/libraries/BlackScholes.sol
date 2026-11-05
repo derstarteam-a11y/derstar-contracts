@@ -20,7 +20,7 @@ library BlackScholes {
     /// @return premium1e8 option price per contract in USD, 8 decimals
     /// @return delta1e6 delta, 6 decimals (negative for puts)
     function price(uint256 spot1e8, uint256 strike, uint256 secondsToExpiry, uint256 vol1e6, bool isCall)
-        internal
+        external
         pure
         returns (uint256 premium1e8, int256 delta1e6)
     {

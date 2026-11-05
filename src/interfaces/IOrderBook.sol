@@ -11,6 +11,17 @@ interface IOrderBook {
         uint64 lots;
     }
 
+    /// @notice One leg of a strategy. `limit` is the worst price in ticks (max for a buy, min for a
+    /// sell). `pledgeFrom` != 0: before this sell, that many long tokens of `pledgeFrom` (bought in
+    /// an earlier leg or held) are pledged as cover, so the leg is written without collateral.
+    struct Leg {
+        uint256 seriesId;
+        Side side;
+        uint64 lots;
+        uint32 limit;
+        uint256 pledgeFrom;
+    }
+
     event OrderPlaced(
         uint64 indexed orderId,
         address indexed maker,
@@ -78,6 +89,12 @@ interface IOrderBook {
     function sell(uint256 seriesId, uint64 lots, uint32 minPriceTicks, uint64 minLots, uint64 deadline)
         external
         returns (uint64 filled, uint256 premium, uint256 fee);
+    /// @notice Up to 4 legs in one transaction, each filled in full or the whole call reverts.
+    function takeFor(address taker, uint256 seriesId, Side side, uint64 lots, uint32 limit)
+        external
+        returns (uint64 filled);
+
+    function takeLegs(Leg[] calldata legs, uint64 deadline) external;
 
     // Views
     function preview(uint256 seriesId, Side side, uint64 lots, uint32 limitTicks, address taker)

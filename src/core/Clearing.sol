@@ -156,14 +156,23 @@ contract Clearing is IClearing, AccessControl, ReentrancyGuard {
     /// @notice Pledges long tokens of `coverId` so that up to `lots` of `shortId` can be written
     /// without collateral. One cover series per short series and account.
     function pledge(uint256 coverId, uint256 shortId, uint64 lots) external nonReentrant {
+        _pledge(msg.sender, coverId, shortId, lots);
+    }
+
+    /// @notice The order book pledges for a taker inside one strategy transaction (takeLegs).
+    function pledgeFor(address account, uint256 coverId, uint256 shortId, uint64 lots) external onlyBook nonReentrant {
+        _pledge(account, coverId, shortId, lots);
+    }
+
+    function _pledge(address account, uint256 coverId, uint256 shortId, uint64 lots) internal {
         if (lots == 0) revert InvalidAmount();
         _requireTradable(shortId);
-        uint256 prev = coverOf[msg.sender][shortId];
+        uint256 prev = coverOf[account][shortId];
         if ((prev != 0 && prev != coverId) || !_covers(coverId, shortId)) revert InvalidCover(coverId, shortId);
-        token.clearingMove(msg.sender, address(this), coverId, lots);
-        coverOf[msg.sender][shortId] = coverId;
-        coverCredit[msg.sender][shortId] += lots;
-        emit Pledged(msg.sender, coverId, shortId, coverCredit[msg.sender][shortId]);
+        token.clearingMove(account, address(this), coverId, lots);
+        coverOf[account][shortId] = coverId;
+        coverCredit[account][shortId] += lots;
+        emit Pledged(account, coverId, shortId, coverCredit[account][shortId]);
     }
 
     /// @notice Takes back pledged tokens that back no short.
@@ -519,36 +528,6 @@ contract Clearing is IClearing, AccessControl, ReentrancyGuard {
     }
 
     // ================================================================ views
-
-    /// @notice What the taker would pay or receive for these fills, without executing them.
-    /// collateralIn: collateral the taker must bring for written lots; collateralOut: freed by covering.
-    function previewFills(address taker, Side takerSide, uint256 seriesId, Fill[] calldata fills)
-        external
-        view
-        returns (uint256 premium, uint256 takerFee, uint256 collateralIn, uint256 collateralOut)
-    {
-        Ctx memory c = _context(taker, takerSide, seriesId);
-        uint256 tokens = token.balanceOf(taker, seriesId);
-        uint256 shortLots = shortOf[taker][seriesId] - coveredShort[taker][seriesId];
-        uint256 credit = coverCredit[taker][seriesId];
-        for (uint256 i; i < fills.length; ++i) {
-            uint256 lots = fills[i].lots;
-            uint256 p = uint256(fills[i].priceTicks) * c.tickUnit * lots;
-            premium += p;
-            takerFee += _fee(c, p, lots, notionalFeePpm);
-            if (takerSide == Side.Sell) {
-                uint256 use = tokens < lots ? tokens : lots;
-                tokens -= use;
-                uint256 cr = credit < lots - use ? credit : lots - use;
-                credit -= cr;
-                collateralIn += (lots - use - cr) * c.perLot;
-            } else {
-                uint256 n = shortLots < lots ? shortLots : lots;
-                shortLots -= n;
-                collateralOut += n * c.perLot;
-            }
-        }
-    }
 
     // ================================================================ admin
 

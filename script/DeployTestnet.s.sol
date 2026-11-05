@@ -9,6 +9,9 @@ import {IvFeed} from "../src/core/IvFeed.sol";
 import {Clearing} from "../src/core/Clearing.sol";
 import {OrderBook} from "../src/core/OrderBook.sol";
 import {ProtocolVault} from "../src/core/ProtocolVault.sol";
+import {StopOrders} from "../src/core/StopOrders.sol";
+import {IOrderBook} from "../src/interfaces/IOrderBook.sol";
+import {IIvFeed} from "../src/interfaces/IIvFeed.sol";
 import {IClearing} from "../src/interfaces/IClearing.sol";
 import {ISeriesRegistry} from "../src/interfaces/ISeriesRegistry.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
@@ -48,6 +51,7 @@ contract DeployTestnet is Script {
     IvFeed internal ivFeed;
     Clearing internal clearing;
     OrderBook internal book;
+    StopOrders internal stops;
     ProtocolVault internal btcCalls;
     ProtocolVault internal ethCalls;
     ProtocolVault internal puts;
@@ -89,6 +93,7 @@ contract DeployTestnet is Script {
         vm.serializeAddress(k, "ivFeed", address(ivFeed));
         vm.serializeAddress(k, "clearing", address(clearing));
         vm.serializeAddress(k, "orderBook", address(book));
+        vm.serializeAddress(k, "stopOrders", address(stops));
         vm.serializeAddress(k, "vaultBtcCalls", address(btcCalls));
         vm.serializeAddress(k, "vaultEthCalls", address(ethCalls));
         vm.serializeAddress(k, "vaultPuts", address(puts));
@@ -166,6 +171,8 @@ contract DeployTestnet is Script {
         token.setClearing(address(clearing));
         clearing.setOrderBook(address(book));
         book.setVolPricing(oracle, 2 hours, 64);
+        stops = new StopOrders(IOrderBook(address(book)), clearing, registry, IIvFeed(address(ivFeed)));
+        book.grantRole(book.EXECUTOR_ROLE(), address(stops));
         if (short_) {
             // Hourly options: trade until 10 minutes before expiry, settle on a 10-minute TWAP.
             registry.setTradingCutoff(10 minutes);
@@ -233,6 +240,7 @@ contract DeployTestnet is Script {
         console2.log("IvFeed", address(ivFeed));
         console2.log("Clearing", address(clearing));
         console2.log("OrderBook", address(book));
+        console2.log("StopOrders", address(stops));
         console2.log("Vault BTC calls", address(btcCalls));
         console2.log("Vault ETH calls", address(ethCalls));
         console2.log("Vault puts", address(puts));

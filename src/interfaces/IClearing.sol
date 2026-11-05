@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
+import {IOracleAdapter} from "./IOracleAdapter.sol";
+
 import {Side, Fill} from "../types/DerstarTypes.sol";
 import {IOptionToken} from "./IOptionToken.sol";
 
@@ -72,6 +74,7 @@ interface IClearing {
     function redeemFor(address[] calldata holders, uint256 seriesId) external;
     function claimShort(uint256 seriesId) external;
     function pledge(uint256 coverId, uint256 shortId, uint64 lots) external;
+    function pledgeFor(address account, uint256 coverId, uint256 shortId, uint64 lots) external;
     function unpledge(uint256 shortId, uint64 lots) external;
     function claimShortFor(address seller, uint256 seriesId) external;
 
@@ -81,11 +84,12 @@ interface IClearing {
     function freeBalance(address account, address token) external view returns (uint256);
     function reservedBalance(address account, address token) external view returns (uint256);
     function shortOf(address account, uint256 seriesId) external view returns (uint64);
+    function coveredShort(address account, uint256 seriesId) external view returns (uint64);
+    function coverCredit(address account, uint256 seriesId) external view returns (uint64);
+    function notionalFeePpm() external view returns (uint32);
+    function premiumCapPpm() external view returns (uint32);
+    function oracle() external view returns (IOracleAdapter);
     function totalShort(uint256 seriesId) external view returns (uint64);
     function isVault(address account) external view returns (bool);
     function token() external view returns (IOptionToken);
-    function previewFills(address taker, Side takerSide, uint256 seriesId, Fill[] calldata fills)
-        external
-        view
-        returns (uint256 premium, uint256 takerFee, uint256 collateralIn, uint256 collateralOut);
 }

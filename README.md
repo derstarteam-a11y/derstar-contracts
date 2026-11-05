@@ -35,7 +35,9 @@ these contracts on Arbitrum; there is no off-chain matching engine and no custod
 
 ```mermaid
 flowchart LR
-    T[Trader wallet] -->|orders, market buy/sell| OB[OrderBook]
+    T[Trader wallet] -->|orders, market buy/sell, strategies| OB[OrderBook]
+    T -->|stop-loss| S[StopOrders]
+    S -->|closes at market| OB
     OB -->|asks for a quote| V[ProtocolVault x3]
     OB -->|fills| C[Clearing]
     C -->|mints / burns longs| OT[OptionToken ERC-1155]
@@ -48,12 +50,16 @@ flowchart LR
     K[Keeper] -->|lists expiries, pushes vols, settles| R
     K --> IV
     K --> C
+    K -->|fires due stops| S
 ```
 
 1. The keeper lists the coming Fridays with a strike grid around spot and publishes an
    implied-volatility smile per expiry.
 2. Traders place limit orders or take liquidity. One Sell button both closes a long and writes a
-   new option against collateral; one Buy button covers a short first.
+   new option against collateral; one Buy button covers a short first. Strategies (spreads,
+   straddles, strangles) fill in one transaction with `takeLegs`: every leg in full or nothing.
+   A stop-loss closes a position at market once its model mark crosses the owner's trigger,
+   never worse than the owner's limit and never for more than the owner holds.
 3. Trading stops 30 minutes before expiry. The settlement price is a 30-minute TWAP walked from
    Chainlink rounds, with an API3 backup if Chainlink stops updating.
 4. Anyone can call settlement: holders are paid the intrinsic value, writers get the rest of their
@@ -91,7 +97,7 @@ Notional is Chainlink spot × contracts.
 
 ## Safety
 
-- **144 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
+- **162 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
   trades, cancels and transfers and checks that Clearing stays exactly solvent and that
   `totalSupply == totalShort` for every series.
 - Price inputs are checked for staleness and for the Arbitrum sequencer being down; the vaults
@@ -103,7 +109,7 @@ Notional is Chainlink spot × contracts.
 ## Repository
 
 ```
-src/core/        Clearing, OrderBook, SeriesRegistry, OptionToken, OracleAdapter, IvFeed, ProtocolVault, FeeCollector
+src/core/        Clearing, OrderBook, StopOrders, SeriesRegistry, OptionToken, OracleAdapter, IvFeed, ProtocolVault, FeeCollector
 src/libraries/   BlackScholes (on-chain, ~18k gas), ExpiryCalendar, TickBitmap, SeriesId
 src/interfaces/  External interfaces
 src/mocks/       Test tokens, mock feeds, TestnetAccess

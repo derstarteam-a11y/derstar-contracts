@@ -185,6 +185,26 @@ contract ProtocolVaultTest is TradingBase {
         assertGt(avail2, 0);
     }
 
+    /// A cheap option: fee and settlement reserve are a large share of the premium. The vault must
+    /// size its bid on what Clearing really debits, or a taker's sell would revert instead of filling.
+    function test_callVaultBidCountsFeeAndReserveOnCheapOptions() public {
+        vm.warp(block.timestamp + 16 minutes); // let the 50% smile go stale: a fresh one may not jump
+        _pushVol(150_000);
+        _seedCallVault(1e8);
+        _give(admin, usdc, 20e6);
+        vm.startPrank(admin);
+        usdc.approve(address(callVault), 20e6);
+        callVault.donateUsdc(20e6);
+        vm.stopPrank();
+
+        (uint32 bid, uint64 avail) = callVault.quote(call110, Side.Buy, 200);
+        assertGt(bid, 0);
+        assertGt(avail, 0);
+        assertLt(avail, 200, "bounded by USDC");
+        assertEq(_sell(bob, call110, avail, 1), avail);
+        assertEq(token.balanceOf(address(callVault), call110), avail);
+    }
+
     function test_donateIsAdminOnly() public {
         _give(alice, usdc, 1e6);
         vm.startPrank(alice);

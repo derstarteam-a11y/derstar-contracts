@@ -8,7 +8,7 @@ import {IClearing} from "../interfaces/IClearing.sol";
 import {ISeriesRegistry} from "../interfaces/ISeriesRegistry.sol";
 import {IQuoteVault} from "../interfaces/IQuoteVault.sol";
 import {IOracleAdapter} from "../interfaces/IOracleAdapter.sol";
-import {Side, Fill, SeriesState, Series, OptionType} from "../types/DerstarTypes.sol";
+import {Side, Fill, SeriesState, Series, OptionType, UnderlyingConfig} from "../types/DerstarTypes.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
 import {SeriesId} from "../libraries/SeriesId.sol";
 import {BlackScholes} from "../libraries/BlackScholes.sol";
@@ -29,6 +29,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
     using TickBitmap for TickBitmap.Bitmap;
 
     uint32 public constant MAX_TICK = type(uint16).max;
+    bytes32 public constant EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
 
     ISeriesRegistry public immutable registry;
     IClearing public immutable clearing;
@@ -282,7 +283,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint64 filled, uint256 premium, uint256 fee)
     {
-        return _take(seriesId, Side.Buy, lots, maxPriceTicks, minLots, deadline);
+        return _take(msg.sender, seriesId, Side.Buy, lots, maxPriceTicks, minLots, deadline);
     }
 
     function sell(uint256 seriesId, uint64 lots, uint32 minPriceTicks, uint64 minLots, uint64 deadline)
@@ -290,35 +291,60 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint64 filled, uint256 premium, uint256 fee)
     {
-        return _take(seriesId, Side.Sell, lots, minPriceTicks, minLots, deadline);
+        return _take(msg.sender, seriesId, Side.Sell, lots, minPriceTicks, minLots, deadline);
     }
 
-    function _take(uint256 seriesId, Side side, uint64 lots, uint32 limit, uint64 minLots, uint64 deadline)
-        internal
-        returns (uint64 filled, uint256 premium, uint256 fee)
+    function takeLegs(Leg[] calldata legs, uint64 deadline) external nonReentrant {
+        if (legs.length == 0 || legs.length > 4) revert InvalidSize();
+        for (uint256 i; i < legs.length; ++i) {
+            Leg calldata l = legs[i];
+            if (l.pledgeFrom != 0) clearing.pledgeFor(msg.sender, l.pledgeFrom, l.seriesId, l.lots);
+            _take(msg.sender, l.seriesId, l.side, l.lots, l.limit, l.lots, deadline);
+        }
+    }
+
+    /// @notice Takes liquidity for `taker`, who must have set this trade up in advance: only the
+    /// stop-order contract holds EXECUTOR_ROLE, and it checks the taker's own trigger and limit.
+    function takeFor(address taker, uint256 seriesId, Side side, uint64 lots, uint32 limit)
+        external
+        onlyRole(EXECUTOR_ROLE)
+        nonReentrant
+        returns (uint64 filled)
     {
+        (filled,,) = _take(taker, seriesId, side, lots, limit, 1, uint64(block.timestamp));
+    }
+
+    function _take(
+        address taker,
+        uint256 seriesId,
+        Side side,
+        uint64 lots,
+        uint32 limit,
+        uint64 minLots,
+        uint64 deadline
+    ) internal returns (uint64 filled, uint256 premium, uint256 fee) {
         if (block.timestamp > deadline) revert Expired(deadline);
         if (lots == 0) revert InvalidSize();
         if (!registry.isTradable(seriesId)) revert SeriesNotTradable(seriesId);
 
         Fill[] memory fills;
-        (fills, filled) = _collect(seriesId, side, lots, limit, msg.sender);
+        (fills, filled) = _collect(seriesId, side, lots, limit, taker);
         if (filled == 0 || filled < minLots) revert BelowMinLots(filled, minLots);
 
         // Consume the resting orders first, then let Clearing move the money.
-        uint64[] memory done = _consume(fills);
-        (premium, fee) = clearing.settleFills(msg.sender, side, seriesId, fills);
+        uint64[] memory done = _consume(fills, taker);
+        (premium, fee) = clearing.settleFills(taker, side, seriesId, fills);
 
         // Fully filled orders hand back what is left of their reserve (a bid's fee buffer).
         for (uint256 i; i < done.length; ++i) {
             clearing.release(done[i]);
         }
-        _emitVaultFills(fills, seriesId, side);
-        emit Taken(msg.sender, seriesId, side, filled, premium, fee);
+        _emitVaultFills(fills, seriesId, side, taker);
+        emit Taken(taker, seriesId, side, filled, premium, fee);
     }
 
     /// @return done orders that were filled completely and left the book
-    function _consume(Fill[] memory fills) internal returns (uint64[] memory done) {
+    function _consume(Fill[] memory fills, address taker) internal returns (uint64[] memory done) {
         done = new uint64[](fills.length);
         uint256 nDone;
         for (uint256 i; i < fills.length; ++i) {
@@ -328,7 +354,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
             VolOrder storage vo = _volOrders[id];
             if (vo.maker != address(0)) {
                 vo.lots -= q;
-                emit OrderFilled(id, msg.sender, q, vo.lots);
+                emit OrderFilled(id, taker, q, vo.lots);
                 if (vo.lots == 0) {
                     _unlinkVol(id);
                     done[nDone++] = id;
@@ -338,7 +364,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
             Order storage o = _orders[id];
             o.lots -= q;
             _levels[_key(o.seriesId, o.side)][o.tick].totalLots -= q;
-            emit OrderFilled(id, msg.sender, q, o.lots);
+            emit OrderFilled(id, taker, q, o.lots);
             if (o.lots == 0) {
                 _unlink(id);
                 done[nDone++] = id;
@@ -349,12 +375,10 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         }
     }
 
-    function _emitVaultFills(Fill[] memory fills, uint256 seriesId, Side side) internal {
+    function _emitVaultFills(Fill[] memory fills, uint256 seriesId, Side side, address taker) internal {
         for (uint256 i; i < fills.length; ++i) {
             if (fills[i].fromVault) {
-                emit VaultFilled(
-                    fills[i].maker, msg.sender, seriesId, _opposite(side), fills[i].priceTicks, fills[i].lots
-                );
+                emit VaultFilled(fills[i].maker, taker, seriesId, _opposite(side), fills[i].priceTicks, fills[i].lots);
             }
         }
     }
@@ -537,7 +561,63 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
             uint32 p = fills[i].priceTicks;
             if (worstTicks == 0 || _better(side == Side.Buy, worstTicks, p)) worstTicks = p;
         }
-        (premium, fee, collateralNeeded, collateralFreed) = clearing.previewFills(taker, side, seriesId, fills);
+        (premium, fee, collateralNeeded, collateralFreed) = _previewCost(taker, side, seriesId, fills);
+    }
+
+    /// @dev Running state of _previewCost (a struct keeps the stack shallow).
+    struct Cost {
+        uint256 lpc;
+        uint256 tickUnit;
+        uint256 perLot;
+        uint256 feeNum;
+        uint256 cap;
+        uint256 tokens;
+        uint256 plainShort;
+        uint256 credit;
+    }
+
+    /// @dev What the taker would pay or receive for these fills (mirrors Clearing.settleFills).
+    /// collateralIn: collateral the taker must bring for written lots; collateralOut: freed by covering.
+    function _previewCost(address taker, Side side, uint256 seriesId, Fill[] memory fills)
+        internal
+        view
+        returns (uint256 premium, uint256 fee, uint256 collateralIn, uint256 collateralOut)
+    {
+        Cost memory k;
+        {
+            uint8 u = SeriesId.underlying(seriesId);
+            UnderlyingConfig memory cfg = registry.config(u);
+            k.lpc = cfg.lotsPerContract;
+            k.tickUnit = cfg.tickSize / cfg.lotsPerContract;
+            (, k.perLot) = registry.collateralPerLot(seriesId);
+            (uint256 spot,) = clearing.oracle().spot(u);
+            k.feeNum = spot * clearing.notionalFeePpm();
+            k.cap = clearing.premiumCapPpm();
+            k.tokens = clearing.token().balanceOf(taker, seriesId);
+            k.plainShort = clearing.shortOf(taker, seriesId) - clearing.coveredShort(taker, seriesId);
+            k.credit = clearing.coverCredit(taker, seriesId);
+        }
+        for (uint256 i; i < fills.length; ++i) {
+            uint256 lots = fills[i].lots;
+            uint256 p = uint256(fills[i].priceTicks) * k.tickUnit * lots;
+            premium += p;
+            fee += _min256(k.feeNum * lots / (k.lpc * 1e8), p * k.cap / 1e6);
+            if (side == Side.Sell) {
+                uint256 use = _min256(k.tokens, lots);
+                k.tokens -= use;
+                uint256 cr = _min256(k.credit, lots - use);
+                k.credit -= cr;
+                collateralIn += (lots - use - cr) * k.perLot;
+            } else {
+                uint256 n = _min256(k.plainShort, lots);
+                k.plainShort -= n;
+                collateralOut += n * k.perLot;
+            }
+        }
+    }
+
+    function _min256(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
     }
 
     function best(uint256 seriesId)
