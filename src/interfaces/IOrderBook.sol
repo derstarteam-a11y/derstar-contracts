@@ -90,6 +90,10 @@ interface IOrderBook {
         external
         returns (uint64 filled, uint256 premium, uint256 fee);
     /// @notice Up to 4 legs in one transaction, each filled in full or the whole call reverts.
+    function takeFor(address taker, uint256 seriesId, Side side, uint64 lots, uint32 limit)
+        external
+        returns (uint64 filled);
+
     function takeLegs(Leg[] calldata legs, uint64 deadline) external;
 
     // Views
