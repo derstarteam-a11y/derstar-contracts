@@ -5,11 +5,25 @@ import {TradingBase} from "./TradingBase.t.sol";
 import {IOrderBook} from "../src/interfaces/IOrderBook.sol";
 import {IClearing} from "../src/interfaces/IClearing.sol";
 import {Side} from "../src/types/DerstarTypes.sol";
+import {MockERC20} from "../src/mocks/MockERC20.sol";
 
 contract TradingTest is TradingBase {
     // ------------------------------------------------------------ buy
 
     /// Spec example: 10 lots (0.1 BTC) of the 110k call at 1 250 USDC, spot 104 000.
+    function test_depositOnlyAcceptsCollateralTokens() public {
+        MockERC20 junk = new MockERC20("Junk", "JNK", 18, 1e18, address(this));
+        junk.mint(alice, 1e18);
+        vm.startPrank(alice);
+        junk.approve(address(clr), 1e18);
+        vm.expectRevert(abi.encodeWithSelector(IClearing.UnsupportedToken.selector, address(junk)));
+        clr.deposit(address(junk), 1e18);
+        vm.stopPrank();
+        assertTrue(registry.isCollateral(address(wbtc)));
+        assertTrue(registry.isCollateral(address(weth)));
+        _deposit(alice, wbtc, 1e8); // collateral still goes in
+    }
+
     function test_buyFromAsk_specExample() public {
         _deposit(mm, wbtc, 1e8);
         _ask(mm, call110, 250, 10);

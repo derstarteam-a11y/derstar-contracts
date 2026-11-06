@@ -35,6 +35,7 @@ interface ISeriesRegistry {
     function config(uint8 underlying) external view returns (UnderlyingConfig memory);
     function symbolOf(uint8 underlying) external view returns (string memory);
     function quoteToken() external view returns (address);
+    function isCollateral(address token) external view returns (bool);
     function tradingCutoff() external view returns (uint32);
     function listExpiries(uint8 underlying) external view returns (uint64[] memory);
     function activeExpiries(uint8 underlying) external view returns (uint64[] memory);

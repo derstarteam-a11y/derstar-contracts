@@ -125,6 +125,8 @@ contract Clearing is IClearing, AccessControl, ReentrancyGuard {
 
     function deposit(address tkn, uint256 amount) external nonReentrant {
         if (amount == 0) revert InvalidAmount();
+        // Only USDC and the underlyings' collateral (WBTC, WETH): nothing else is ever used here.
+        if (tkn != usdc && !registry.isCollateral(tkn)) revert UnsupportedToken(tkn);
         IERC20(tkn).safeTransferFrom(msg.sender, address(this), amount);
         freeBalance[msg.sender][tkn] += amount;
         emit Deposited(msg.sender, tkn, amount);

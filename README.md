@@ -97,7 +97,7 @@ Notional is Chainlink spot × contracts.
 
 ## Safety
 
-- **162 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
+- **163 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
   trades, cancels and transfers and checks that Clearing stays exactly solvent and that
   `totalSupply == totalShort` for every series.
 - Price inputs are checked for staleness and for the Arbitrum sequencer being down; the vaults
