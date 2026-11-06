@@ -33,6 +33,8 @@ contract SeriesRegistry is ISeriesRegistry, AccessControl {
     mapping(uint8 => UnderlyingConfig) internal _configs;
     mapping(uint8 => string) internal _symbols;
     mapping(uint8 => bool) public hasSeries;
+    /// @notice Tokens Clearing accepts as collateral: every underlying's collateral (set once, never removed).
+    mapping(address => bool) public isCollateral;
 
     mapping(uint256 => SeriesState) internal _state;
     mapping(uint8 => uint64[]) internal _expiries;
@@ -131,6 +133,7 @@ contract SeriesRegistry is ISeriesRegistry, AccessControl {
         }
         _configs[underlying] = cfg;
         _symbols[underlying] = symbol;
+        isCollateral[cfg.collateral] = true;
         emit UnderlyingSet(underlying, symbol, cfg);
     }
 

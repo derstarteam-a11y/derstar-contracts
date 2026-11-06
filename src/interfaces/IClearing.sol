@@ -47,6 +47,7 @@ interface IClearing {
     error NotAVault(address account);
     error InvalidCover(uint256 coverId, uint256 shortId);
     error InvalidAmount();
+    error UnsupportedToken(address token);
     error InvalidConfig();
     error NotExpired(uint256 seriesId);
     error PriceNotFinal(uint256 seriesId);
