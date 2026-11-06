@@ -22,6 +22,6 @@ Trust assumptions and known behaviour, so review time goes to what is not alread
 
 ## Known limitations
 
-- OrderBook, Clearing and ProtocolVault are within about 1–2.5 KB of the 24 KB code size limit.
+- OrderBook, Clearing and ProtocolVault are close to the 24 KB code size limit (about 1 KB, 0.9 KB and 2.5 KB of headroom).
 - Clearing accepts deposits only in USDC and in the collateral tokens of configured underlyings (WBTC, WETH). Fee-on-transfer and rebasing tokens are not supported and are not configured.
 - Static analysis: Slither and Aderyn high findings were reviewed; the remaining ones are false positives (calls to the protocol's own contracts under `nonReentrant`, guarded casts, and library code in OpenZeppelin and Solady).
