@@ -13,7 +13,6 @@
     "@foundry-rs/anvil-linux-amd64": "^1.7.1",
     "@foundry-rs/forge-linux-amd64": "^1.7.1",
     "@openzeppelin/contracts": "^5.4.0",
-    "forge-std": "^1.1.2",
     "solady": "^0.1.26"
   },
   "private": true
