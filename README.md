@@ -71,15 +71,16 @@ Closed testnet, deployed 31 Oct 2026 (block 324535483).
 
 | Contract | Address | Role |
 |---|---|---|
-| SeriesRegistry | [`0xbDABDF3Dbd83E231286d567E545c773425bb21CD`](https://sepolia.arbiscan.io/address/0xbDABDF3Dbd83E231286d567E545c773425bb21CD) | Underlyings, weekly calendar, strike grid, trading cutoff |
-| Clearing | [`0x0c3C57c8981Fbe8988d6019d124E30c419081e62`](https://sepolia.arbiscan.io/address/0x0c3C57c8981Fbe8988d6019d124E30c419081e62) | Balances, collateral, fills, fees, settlement and payouts |
-| OrderBook | [`0x4807dd5c730A01ef4219A9F62a1DB09E503484E1`](https://sepolia.arbiscan.io/address/0x4807dd5c730A01ef4219A9F62a1DB09E503484E1) | Limit and vol orders, price-time priority, market buy/sell |
-| OptionToken | [`0xfc4F18c5acbb3e498a831D0195696f18CE2F04F2`](https://sepolia.arbiscan.io/address/0xfc4F18c5acbb3e498a831D0195696f18CE2F04F2) | ERC-1155 long positions (id = series id) |
-| OracleAdapter | [`0xf00271f4629E85548f0865A559D349D0F01D8300`](https://sepolia.arbiscan.io/address/0xf00271f4629E85548f0865A559D349D0F01D8300) | Chainlink spot, 30-min settlement TWAP, API3 backup |
-| IvFeed | [`0x7BD0B5d7C9cB28Dd18bD61A8f8204A2df92263C4`](https://sepolia.arbiscan.io/address/0x7BD0B5d7C9cB28Dd18bD61A8f8204A2df92263C4) | Implied-vol smile per expiry |
-| ProtocolVault (BTC calls) | [`0xC3177Fd93BA57240A06006B94DF039c92322FeB8`](https://sepolia.arbiscan.io/address/0xC3177Fd93BA57240A06006B94DF039c92322FeB8) | Quotes BTC calls, collateral tWBTC |
-| ProtocolVault (ETH calls) | [`0x1e2414Dde5A28BC5D2Cc29001cccA110FFbfb7Ad`](https://sepolia.arbiscan.io/address/0x1e2414Dde5A28BC5D2Cc29001cccA110FFbfb7Ad) | Quotes ETH calls, collateral tWETH |
-| ProtocolVault (puts) | [`0xab893f9Ff88bAe6856ae703a199aDB246842d3e4`](https://sepolia.arbiscan.io/address/0xab893f9Ff88bAe6856ae703a199aDB246842d3e4) | Quotes BTC and ETH puts, collateral tUSDC |
+| SeriesRegistry | [`0x6FD72d25907b1D7ef31Ad50d83793B346bA411BC`](https://sepolia.arbiscan.io/address/0x6FD72d25907b1D7ef31Ad50d83793B346bA411BC) | Underlyings, weekly calendar, strike grid, trading cutoff |
+| Clearing | [`0xd284fb4757E2032A087F57F5C5383C8EE5DDc67C`](https://sepolia.arbiscan.io/address/0xd284fb4757E2032A087F57F5C5383C8EE5DDc67C) | Balances, collateral, fills, fees, settlement and payouts |
+| OrderBook | [`0xa33932121F627B490dfC8663525bc0c3fc108Ad8`](https://sepolia.arbiscan.io/address/0xa33932121F627B490dfC8663525bc0c3fc108Ad8) | Limit and vol orders, price-time priority, market buy/sell |
+| StopOrders | [`0x272037cBcdB3893fFe29f2aa8341f37F194dd6d7`](https://sepolia.arbiscan.io/address/0x272037cBcdB3893fFe29f2aa8341f37F194dd6d7) | Stop-loss orders, executed by the keeper at market |
+| OptionToken | [`0xD9c03B095BfD60e9cD9649D60452573c97609A7B`](https://sepolia.arbiscan.io/address/0xD9c03B095BfD60e9cD9649D60452573c97609A7B) | ERC-1155 long positions (id = series id) |
+| OracleAdapter | [`0x2FFA67EaFE9deD60714cB9809c22393e754F17aB`](https://sepolia.arbiscan.io/address/0x2FFA67EaFE9deD60714cB9809c22393e754F17aB) | Chainlink spot, 30-min settlement TWAP, API3 backup |
+| IvFeed | [`0xfF26Aa7DB7882EfA20D2D260C4b78bBFa7C6BDA3`](https://sepolia.arbiscan.io/address/0xfF26Aa7DB7882EfA20D2D260C4b78bBFa7C6BDA3) | Implied-vol smile per expiry |
+| ProtocolVault (BTC calls) | [`0x2BE0BFDbA6d682F05F9C3A760616b23B200177A7`](https://sepolia.arbiscan.io/address/0x2BE0BFDbA6d682F05F9C3A760616b23B200177A7) | Quotes BTC calls, collateral tWBTC |
+| ProtocolVault (ETH calls) | [`0x81C878D2dA15Ae4999fCdd75225d7f01dCA99AA9`](https://sepolia.arbiscan.io/address/0x81C878D2dA15Ae4999fCdd75225d7f01dCA99AA9) | Quotes ETH calls, collateral tWETH |
+| ProtocolVault (puts) | [`0xb616e1AB179cA71f518a3A609301621602894a46`](https://sepolia.arbiscan.io/address/0xb616e1AB179cA71f518a3A609301621602894a46) | Quotes BTC and ETH puts, collateral tUSDC |
 | tUSDC / tWBTC / tWETH | [`0x965e5368c8E75A23E3E1eD6e80a47B78874d6b9c`](https://sepolia.arbiscan.io/address/0x965e5368c8E75A23E3E1eD6e80a47B78874d6b9c) [`0xd1eb2997F5bdFbe1Fe734C329A725811adEfd2b6`](https://sepolia.arbiscan.io/address/0xd1eb2997F5bdFbe1Fe734C329A725811adEfd2b6) [`0x6018c44D38e4b540da8c0791Ea2e1E298b8FB522`](https://sepolia.arbiscan.io/address/0x6018c44D38e4b540da8c0791Ea2e1E298b8FB522) | Test tokens with a daily faucet |
 | TestnetAccess | [`0x1376dBB6479208096eDB7d92CC12c434977EfC96`](https://sepolia.arbiscan.io/address/0x1376dBB6479208096eDB7d92CC12c434977EfC96) | Invite list for the closed testnet faucets |
 
