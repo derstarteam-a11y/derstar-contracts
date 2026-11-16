@@ -140,4 +140,4 @@ forge test
 Copyright © 2026 Derstar. All rights reserved. The source is published for transparency and
 review; see [LICENSE](LICENSE).
 
-Security issues: write to derstar.team@gmail.com.
+Security issues: open a ticket in our [Discord](https://discord.gg/yAawhGKQxP) and say it is a security report. Please do not post details in public channels.
