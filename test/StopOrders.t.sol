@@ -205,4 +205,30 @@ contract StopOrdersTest is TradingBase {
         vm.prank(carol);
         book.takeFor(bob, call110, Side.Sell, 10, 1);
     }
+
+    // ------------------------------------------------------------ API wallets
+
+    function test_agentPlacesAndCancelsStopForOwner() public {
+        _bobLong();
+        vm.prank(bob);
+        agents.setAgent(bot, uint64(block.timestamp + 1 days));
+        vm.prank(bot);
+        uint64 id = stops.placeAs(bob, call110, Side.Sell, 10, 300, 200);
+        assertEq(stops.getStop(id).owner, bob);
+        assertEq(stops.stopCount(bob), 1);
+        vm.prank(bot);
+        stops.cancel(id);
+        assertEq(stops.stopCount(bob), 0);
+    }
+
+    function test_strangerCannotPlaceStopForOwner() public {
+        _bobLong();
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IOrderBook.NotAgent.selector, bob, alice));
+        stops.placeAs(bob, call110, Side.Sell, 10, 300, 200);
+        uint64 id = _place(bob, Side.Sell, 10, 300, 200);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(StopOrders.NotStopOwner.selector, id));
+        stops.cancel(id);
+    }
 }

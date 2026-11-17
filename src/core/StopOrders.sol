@@ -80,6 +80,25 @@ contract StopOrders is ReentrancyGuard {
         nonReentrant
         returns (uint64 stopId)
     {
+        return _place(msg.sender, seriesId, side, lots, triggerTicks, limitTicks);
+    }
+
+    /// @notice place as `account`, sent by one of its agents in AgentRegistry (API wallets).
+    function placeAs(address account, uint256 seriesId, Side side, uint64 lots, uint32 triggerTicks, uint32 limitTicks)
+        external
+        nonReentrant
+        returns (uint64 stopId)
+    {
+        if (account != msg.sender && !book.agents().isAgent(account, msg.sender)) {
+            revert IOrderBook.NotAgent(account, msg.sender);
+        }
+        return _place(account, seriesId, side, lots, triggerTicks, limitTicks);
+    }
+
+    function _place(address owner, uint256 seriesId, Side side, uint64 lots, uint32 triggerTicks, uint32 limitTicks)
+        internal
+        returns (uint64 stopId)
+    {
         if (lots == 0) revert InvalidSize();
         // A sell limit above its trigger (or a buy limit below it) could never fill when it fires.
         if (
@@ -89,19 +108,20 @@ contract StopOrders is ReentrancyGuard {
             revert InvalidPrice();
         }
         if (!registry.isTradable(seriesId)) revert SeriesNotTradable(seriesId);
-        if (_held(msg.sender, seriesId, side) == 0) revert NoPosition(seriesId);
-        if (stopCount[msg.sender] >= MAX_STOPS_PER_ACCOUNT) revert TooManyStops();
+        if (_held(owner, seriesId, side) == 0) revert NoPosition(seriesId);
+        if (stopCount[owner] >= MAX_STOPS_PER_ACCOUNT) revert TooManyStops();
 
         stopId = ++nextStopId;
-        _stops[stopId] = Stop(msg.sender, lots, triggerTicks, limitTicks, side, seriesId);
-        ++stopCount[msg.sender];
-        emit StopPlaced(stopId, msg.sender, seriesId, side, lots, triggerTicks, limitTicks);
+        _stops[stopId] = Stop(owner, lots, triggerTicks, limitTicks, side, seriesId);
+        ++stopCount[owner];
+        emit StopPlaced(stopId, owner, seriesId, side, lots, triggerTicks, limitTicks);
     }
 
+    /// @notice The owner or one of its agents in AgentRegistry.
     function cancel(uint64 stopId) external nonReentrant {
         Stop storage s = _stops[stopId];
         if (s.owner == address(0)) revert UnknownStop(stopId);
-        if (s.owner != msg.sender) revert NotStopOwner(stopId);
+        if (s.owner != msg.sender && !book.agents().isAgent(s.owner, msg.sender)) revert NotStopOwner(stopId);
         _delete(stopId, s.owner);
     }
 

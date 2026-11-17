@@ -10,6 +10,7 @@ import {Clearing} from "../src/core/Clearing.sol";
 import {OrderBook} from "../src/core/OrderBook.sol";
 import {ProtocolVault} from "../src/core/ProtocolVault.sol";
 import {StopOrders} from "../src/core/StopOrders.sol";
+import {AgentRegistry} from "../src/core/AgentRegistry.sol";
 import {IOrderBook} from "../src/interfaces/IOrderBook.sol";
 import {IIvFeed} from "../src/interfaces/IIvFeed.sol";
 import {IClearing} from "../src/interfaces/IClearing.sol";
@@ -51,6 +52,7 @@ contract DeployTestnet is Script {
     IvFeed internal ivFeed;
     Clearing internal clearing;
     OrderBook internal book;
+    AgentRegistry internal agents;
     StopOrders internal stops;
     ProtocolVault internal btcCalls;
     ProtocolVault internal ethCalls;
@@ -93,6 +95,7 @@ contract DeployTestnet is Script {
         vm.serializeAddress(k, "ivFeed", address(ivFeed));
         vm.serializeAddress(k, "clearing", address(clearing));
         vm.serializeAddress(k, "orderBook", address(book));
+        vm.serializeAddress(k, "agentRegistry", address(agents));
         vm.serializeAddress(k, "stopOrders", address(stops));
         vm.serializeAddress(k, "vaultBtcCalls", address(btcCalls));
         vm.serializeAddress(k, "vaultEthCalls", address(ethCalls));
@@ -166,7 +169,8 @@ contract DeployTestnet is Script {
         }
         ivFeed = new IvFeed(deployer, keeper);
         clearing = new Clearing(deployer, registry, token, oracle, vm.envOr("FEE_RECIPIENT", deployer));
-        book = new OrderBook(deployer, registry, clearing);
+        agents = new AgentRegistry();
+        book = new OrderBook(deployer, registry, clearing, agents);
         registry.setClearing(address(clearing));
         token.setClearing(address(clearing));
         clearing.setOrderBook(address(book));

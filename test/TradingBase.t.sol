@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import {BaseTest} from "./Base.t.sol";
 import {Clearing} from "../src/core/Clearing.sol";
 import {OrderBook} from "../src/core/OrderBook.sol";
+import {AgentRegistry} from "../src/core/AgentRegistry.sol";
 import {OracleAdapter} from "../src/core/OracleAdapter.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {MockQuoteVault} from "../src/mocks/MockQuoteVault.sol";
@@ -15,6 +16,7 @@ abstract contract TradingBase is BaseTest {
     OracleAdapter internal oracle;
     Clearing internal clr;
     OrderBook internal book;
+    AgentRegistry internal agents;
     MockQuoteVault internal vault;
 
     address internal mm = makeAddr("mm");
@@ -34,7 +36,8 @@ abstract contract TradingBase is BaseTest {
         vm.stopPrank();
         oracle = new OracleAdapter(admin, registry, AggregatorV3Interface(address(0)));
         clr = new Clearing(admin, registry, token, oracle, fees);
-        book = new OrderBook(admin, registry, clr);
+        agents = new AgentRegistry();
+        book = new OrderBook(admin, registry, clr, agents);
         vault = new MockQuoteVault(clr);
         vm.startPrank(admin);
         registry.setClearing(address(clr));
