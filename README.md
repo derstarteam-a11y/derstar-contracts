@@ -98,7 +98,7 @@ Notional is Chainlink spot × contracts.
 
 ## Safety
 
-- **163 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
+- **178 tests**, including fuzzing and an invariant suite that runs thousands of random orders,
   trades, cancels and transfers and checks that Clearing stays exactly solvent and that
   `totalSupply == totalShort` for every series.
 - Price inputs are checked for staleness and for the Arbitrum sequencer being down; the vaults
@@ -110,7 +110,7 @@ Notional is Chainlink spot × contracts.
 ## Repository
 
 ```
-src/core/        Clearing, OrderBook, StopOrders, SeriesRegistry, OptionToken, OracleAdapter, IvFeed, ProtocolVault, FeeCollector
+src/core/        Clearing, OrderBook, StopOrders, AgentRegistry, SeriesRegistry, OptionToken, OracleAdapter, IvFeed, ProtocolVault, FeeCollector
 src/libraries/   BlackScholes (on-chain, ~18k gas), ExpiryCalendar, TickBitmap, SeriesId
 src/interfaces/  External interfaces
 src/mocks/       Test tokens, mock feeds, TestnetAccess

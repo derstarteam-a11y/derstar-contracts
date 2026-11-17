@@ -8,6 +8,7 @@ import {IClearing} from "../interfaces/IClearing.sol";
 import {ISeriesRegistry} from "../interfaces/ISeriesRegistry.sol";
 import {IQuoteVault} from "../interfaces/IQuoteVault.sol";
 import {IOracleAdapter} from "../interfaces/IOracleAdapter.sol";
+import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
 import {Side, Fill, SeriesState, Series, OptionType, UnderlyingConfig} from "../types/DerstarTypes.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
 import {SeriesId} from "../libraries/SeriesId.sol";
@@ -33,6 +34,8 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
 
     ISeriesRegistry public immutable registry;
     IClearing public immutable clearing;
+    /// @notice API wallets: who may trade for an account through `execAs`.
+    IAgentRegistry public immutable agents;
 
     uint16 public maxFillsPerTx = 32;
     uint64 public nextOrderId;
@@ -85,11 +88,42 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
     mapping(bytes32 => uint64) internal _volHead;
     mapping(bytes32 => uint16) public volOrderCount;
 
-    constructor(address admin, ISeriesRegistry registry_, IClearing clearing_) {
-        if (admin == address(0)) revert InvalidConfig();
+    /// @dev The account an `execAs` batch trades for; zero outside one.
+    address private transient _actor;
+
+    constructor(address admin, ISeriesRegistry registry_, IClearing clearing_, IAgentRegistry agents_) {
+        if (admin == address(0) || address(agents_) == address(0)) revert InvalidConfig();
         registry = registry_;
         clearing = clearing_;
+        agents = agents_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    // ================================================================ API wallets
+
+    /// @notice Runs `calls` (encoded calls of this contract's trading functions) as `account`:
+    /// orders placed are the account's, takes are paid from and delivered to the account. The
+    /// caller is the account itself (a plain batch) or one of its agents in AgentRegistry. All
+    /// calls succeed or the whole batch reverts. No nesting.
+    function execAs(address account, bytes[] calldata calls) external {
+        if (_actor != address(0)) revert InvalidConfig();
+        if (account != msg.sender && !agents.isAgent(account, msg.sender)) revert NotAgent(account, msg.sender);
+        _actor = account;
+        for (uint256 i; i < calls.length; ++i) {
+            (bool ok, bytes memory ret) = address(this).delegatecall(calls[i]);
+            if (!ok) {
+                assembly {
+                    revert(add(ret, 32), mload(ret))
+                }
+            }
+        }
+        _actor = address(0);
+    }
+
+    /// @dev Who trades: the account of the running `execAs` batch, else the caller.
+    function _sender() internal view returns (address) {
+        address a = _actor;
+        return a == address(0) ? msg.sender : a;
     }
 
     // ================================================================ makers
@@ -99,14 +133,14 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint64 orderId)
     {
-        return _place(msg.sender, seriesId, side, priceTicks, lots);
+        return _place(_sender(), seriesId, side, priceTicks, lots);
     }
 
     function placeOrders(OrderParams[] calldata orders) external nonReentrant returns (uint64[] memory orderIds) {
         orderIds = new uint64[](orders.length);
         for (uint256 i; i < orders.length; ++i) {
             OrderParams calldata o = orders[i];
-            orderIds[i] = _place(msg.sender, o.seriesId, o.side, o.priceTicks, o.lots);
+            orderIds[i] = _place(_sender(), o.seriesId, o.side, o.priceTicks, o.lots);
         }
     }
 
@@ -130,7 +164,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         Order storage o = _orders[orderId];
         (uint256 seriesId, Side side) = (o.seriesId, o.side);
         _cancelOwn(orderId);
-        return _place(msg.sender, seriesId, side, newPriceTicks, newLots);
+        return _place(_sender(), seriesId, side, newPriceTicks, newLots);
     }
 
     /// @notice After the cutoff anyone can clear a series' book so makers get their reserves back.
@@ -206,9 +240,10 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         if (volOrderCount[key] >= maxVolOrdersPerSide) revert TooManyVolOrders(seriesId, side);
 
         orderId = ++nextOrderId;
+        address maker = _sender();
         // A bid reserves at its price cap, an ask its tokens or collateral, as for price orders.
-        if (side == Side.Buy) clearing.reserveBid(msg.sender, orderId, seriesId, lots, limitTicks);
-        else clearing.reserveAsk(msg.sender, orderId, seriesId, lots);
+        if (side == Side.Buy) clearing.reserveBid(maker, orderId, seriesId, lots, limitTicks);
+        else clearing.reserveAsk(maker, orderId, seriesId, lots);
 
         // Find the first order this one ranks ahead of.
         uint64 prev;
@@ -220,13 +255,13 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
             cur = _volOrders[cur].next;
         }
         // forge-lint: disable-next-line(unsafe-typecast) -- bounded by MAX_TICK above
-        _volOrders[orderId] = VolOrder(msg.sender, prev, cur, lots, vol, uint16(limitTicks), side, seriesId);
+        _volOrders[orderId] = VolOrder(maker, prev, cur, lots, vol, uint16(limitTicks), side, seriesId);
         if (prev != 0) _volOrders[prev].next = orderId;
         else _volHead[key] = orderId;
         if (cur != 0) _volOrders[cur].prev = orderId;
         ++volOrderCount[key];
 
-        emit VolOrderPlaced(orderId, msg.sender, seriesId, side, vol, limitTicks, lots);
+        emit VolOrderPlaced(orderId, maker, seriesId, side, vol, limitTicks, lots);
     }
 
     function _removeVol(uint64 orderId) internal {
@@ -251,7 +286,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         bool vol = maker == address(0);
         if (vol) maker = _volOrders[orderId].maker;
         if (maker == address(0)) revert UnknownOrder(orderId);
-        if (maker != msg.sender) revert NotOrderOwner(orderId);
+        if (maker != _sender()) revert NotOrderOwner(orderId);
         if (vol) _removeVol(orderId);
         else _remove(orderId);
     }
@@ -283,7 +318,7 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint64 filled, uint256 premium, uint256 fee)
     {
-        return _take(msg.sender, seriesId, Side.Buy, lots, maxPriceTicks, minLots, deadline);
+        return _take(_sender(), seriesId, Side.Buy, lots, maxPriceTicks, minLots, deadline);
     }
 
     function sell(uint256 seriesId, uint64 lots, uint32 minPriceTicks, uint64 minLots, uint64 deadline)
@@ -291,15 +326,16 @@ contract OrderBook is IOrderBook, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint64 filled, uint256 premium, uint256 fee)
     {
-        return _take(msg.sender, seriesId, Side.Sell, lots, minPriceTicks, minLots, deadline);
+        return _take(_sender(), seriesId, Side.Sell, lots, minPriceTicks, minLots, deadline);
     }
 
     function takeLegs(Leg[] calldata legs, uint64 deadline) external nonReentrant {
         if (legs.length == 0 || legs.length > 4) revert InvalidSize();
+        address taker = _sender();
         for (uint256 i; i < legs.length; ++i) {
             Leg calldata l = legs[i];
-            if (l.pledgeFrom != 0) clearing.pledgeFor(msg.sender, l.pledgeFrom, l.seriesId, l.lots);
-            _take(msg.sender, l.seriesId, l.side, l.lots, l.limit, l.lots, deadline);
+            if (l.pledgeFrom != 0) clearing.pledgeFor(taker, l.pledgeFrom, l.seriesId, l.lots);
+            _take(taker, l.seriesId, l.side, l.lots, l.limit, l.lots, deadline);
         }
     }
 

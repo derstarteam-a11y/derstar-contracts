@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Side} from "../types/DerstarTypes.sol";
+import {IAgentRegistry} from "./IAgentRegistry.sol";
 
 interface IOrderBook {
     struct OrderParams {
@@ -67,6 +68,12 @@ interface IOrderBook {
     error InvalidVol(uint32 vol);
     error TooManyVolOrders(uint256 seriesId, Side side);
     error VolOrdersDisabled();
+    error NotAgent(address account, address caller);
+
+    // API wallets (AgentRegistry). execAs runs a batch of this contract's trading calls as
+    // `account`, sent by the account itself or one of its agents.
+    function agents() external view returns (IAgentRegistry);
+    function execAs(address account, bytes[] calldata calls) external;
 
     // Makers. Every limit order is post-only: crossing the other side reverts.
     function placeOrder(uint256 seriesId, Side side, uint32 priceTicks, uint64 lots) external returns (uint64 orderId);

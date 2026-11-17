@@ -8,6 +8,7 @@ Trust assumptions and known behaviour, so review time goes to what is not alread
 - **Guardian** can pause new trades. Withdrawals of free funds, order cancellation, settlement and payouts stay open during a pause.
 - **Keeper** holds two roles: series listing (SeriesRegistry) and volatility publication (IvFeed). IvFeed bounds every value and every step (5%–300%, ATM change ≤ 30% per update, |skew| ≤ 3, |curv| ≤ 30, stale after 15 min). The smile is the protocol's main offchain trust point.
 - **EXECUTOR_ROLE** on OrderBook is granted only to StopOrders. `takeFor` trades on behalf of a stop's owner: it can spend the owner's USDC allowance to Clearing for a buy-back, bounded by the owner's own limit price and position size.
+- **API wallets (AgentRegistry).** An account names agent keys with an expiry (`setAgent`, 0 revokes). An agent trades as the account through `OrderBook.execAs(account, calls)`, which delegatecalls the book's own functions with the acting account held in transient storage (`_sender()`), and through `StopOrders.placeAs` / `cancel`. Trading as the account includes taking liquidity, so a buy can spend the account's USDC allowance to Clearing, as for any taker. An agent cannot withdraw from Clearing, transfer option tokens, name other agents or use roles (role checks still see `msg.sender`). A leaked agent key can therefore lose money through bad trades (for example against the attacker's own orders) but cannot move funds out directly. `execAs` cannot nest, and the acting account is cleared at the end of each batch.
 
 ## Oracles
 
@@ -22,6 +23,6 @@ Trust assumptions and known behaviour, so review time goes to what is not alread
 
 ## Known limitations
 
-- OrderBook, Clearing and ProtocolVault are close to the 24 KB code size limit (about 1 KB, 0.9 KB and 2.5 KB of headroom).
+- OrderBook, Clearing and ProtocolVault are close to the 24 KB code size limit (about 0.2 KB, 0.9 KB and 2.5 KB of headroom).
 - Clearing accepts deposits only in USDC and in the collateral tokens of configured underlyings (WBTC, WETH). Fee-on-transfer and rebasing tokens are not supported and are not configured.
 - Static analysis: Slither and Aderyn high findings were reviewed; the remaining ones are false positives (calls to the protocol's own contracts under `nonReentrant`, guarded casts, and library code in OpenZeppelin and Solady).
